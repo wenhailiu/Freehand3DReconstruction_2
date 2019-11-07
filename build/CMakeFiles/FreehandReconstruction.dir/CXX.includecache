@@ -1,0 +1,42 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/wenhai/vsc_workspace/Freehand3DReconstruction_2/src/FreehandReconstruction.h
+../utilities/ultrasound_frames.h
+/home/wenhai/vsc_workspace/Freehand3DReconstruction_2/utilities/ultrasound_frames.h
+../utilities/volumetric.h
+/home/wenhai/vsc_workspace/Freehand3DReconstruction_2/utilities/volumetric.h
+
+/home/wenhai/vsc_workspace/Freehand3DReconstruction_2/src/main.cpp
+iostream
+-
+FreehandReconstruction.h
+/home/wenhai/vsc_workspace/Freehand3DReconstruction_2/src/FreehandReconstruction.h
+
+/home/wenhai/vsc_workspace/Freehand3DReconstruction_2/utilities/img_base.h
+
+/home/wenhai/vsc_workspace/Freehand3DReconstruction_2/utilities/ultrasound_frames.h
+string
+-
+vector
+-
+yaml-cpp/yaml.h
+/home/wenhai/vsc_workspace/Freehand3DReconstruction_2/utilities/yaml-cpp/yaml.h
+img_base.h
+/home/wenhai/vsc_workspace/Freehand3DReconstruction_2/utilities/img_base.h
+
+/home/wenhai/vsc_workspace/Freehand3DReconstruction_2/utilities/volumetric.h
+string
+-
+vector
+-
+yaml-cpp/yaml.h
+/home/wenhai/vsc_workspace/Freehand3DReconstruction_2/utilities/yaml-cpp/yaml.h
+img_base.h
+/home/wenhai/vsc_workspace/Freehand3DReconstruction_2/utilities/img_base.h
+
