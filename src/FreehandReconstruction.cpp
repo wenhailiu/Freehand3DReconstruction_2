@@ -124,7 +124,8 @@ ImageBase::Ultrasound_Container(Initialization_parameter_path)
                 
                 TrimmedSize = ValidSlice_EndIndex - ValidSlice_BegIndex + 1;
 
-                std::cout << "[STATE]: Valid slices range: " << ValidSlice_BegIndex << " to " << ValidSlice_EndIndex << std::endl;
+                std::cout << "[STATE]: Valid slices range: " << ValidSlice_BegIndex << " to " << ValidSlice_EndIndex << 
+                ", among scanned slices: " << 0 << "to " << NumFrames << ". " << std::endl;
             }
             
             //Step 3: Trim: Frames_Raw_Data, ReferenceToTrackerMatrices, ProbeToTrackerMatrices.
