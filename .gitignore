@@ -1,0 +1,6 @@
+#folders: 
+build
+
+#files: 
+init_data/*.raw
+init_data/*.nrrd
