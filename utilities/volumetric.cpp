@@ -131,7 +131,7 @@ void ImageBase::Volume_Container::SetVolumeDataReconstructed(){
     // parameters_file_handle = YAML::LoadFile(Input_Parameter_Path_internal);
     parameters_file_handle["ReconstructionVolume"]["IsReconstructed"] = true;
 }
-
+    
 bool ImageBase::Volume_Container::IsVolumeDataValid(){
     return Data_Valid;
 }
