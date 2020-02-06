@@ -1,5 +1,6 @@
 #folders: 
 build
+.vscode
 
 #files: 
 init_data/*.raw
