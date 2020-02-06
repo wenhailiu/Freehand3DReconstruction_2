@@ -35,7 +35,7 @@ __device__ int GetPxlIdx(int col_idx, int row_idx, int pag_idx){
     return col_idx + row_idx * blockDim.x * gridDim.x + pag_idx * blockDim.x * gridDim.x * blockDim.y * gridDim.y;
 }
 
-__global__ void HoleFilling_GPU(float *Volume_d, float *Volume_cpy_d, float *Weighting_d){
+__global__ void HoleFilling_GPU(uint8_t *Volume_d, float *Volume_cpy_d, float *Weighting_d){
     int col_idx = threadIdx.x + blockIdx.x * blockDim.x;
     int row_idx = threadIdx.y + blockIdx.y * blockDim.y;
     int pag_idx = threadIdx.z + blockIdx.z * blockDim.z;
@@ -67,7 +67,13 @@ __global__ void HoleFilling_GPU(float *Volume_d, float *Volume_cpy_d, float *Wei
                 }
             }
             if(Acc_NotZeroVoxel > 0){
-                Volume_d[Vol_idx] = Acc_Sum / Acc_NotZeroVoxel;
+                float outputValue = Acc_Sum / Acc_NotZeroVoxel; 
+                if(outputValue >= 0 || outputValue <= 255){
+                    Volume_d[Vol_idx] = (uint8_t)round(Acc_Sum / Acc_NotZeroVoxel);
+                }
+                else{
+                    Volume_d[Vol_idx] = 0; 
+                }
             }
         }
     }
@@ -197,7 +203,7 @@ __global__ void GetYZ_plane(float *Volume_d, float *plane_d, int Location){
     }
 }
 
-void GPU_Setups(const ImageBase::us_parameters_structure US_Params, const ImageBase::volume_parameters_structure Vol_Params, const int NumFrames, const float* TotalMatrices, float* Recon_Volume, float* Weighting_Volume, uint8_t* US_Frames){
+void GPU_Setups(const ImageBase::us_parameters_structure US_Params, const ImageBase::volume_parameters_structure Vol_Params, const int NumFrames, const float* TotalMatrices, float* Recon_Volume, float* Weighting_Volume, uint8_t *VolumeTosave, uint8_t* US_Frames){
 
     //Asignment for Device constant memory:
     cudaMemcpyToSymbol(ImageToVolume_DeviceConstant, TotalMatrices, NumFrames * 16 * sizeof(float));
@@ -241,8 +247,13 @@ void GPU_Setups(const ImageBase::us_parameters_structure US_Params, const ImageB
     );
     US_Distribution_GPU<<<GridDim_Distribution, BlockDim_Distribution>>>(Volume_d, Weighting_d, US_Frame_d, Vol_Params.v_size_mm.x, Vol_Params.v_size_mm.y, Vol_Params.v_size_mm.z, Vol_Params.origin_mm.x, Vol_Params.origin_mm.y, Vol_Params.origin_mm.z);
     cudaMemcpy(Volume_cpy_d, Volume_d, Vol_Params.dim_vxl.x * Vol_Params.dim_vxl.y * Vol_Params.dim_vxl.z * sizeof(float), cudaMemcpyDeviceToDevice);
+
     
     /*----------------------------------------------- Hole Filling ---------------------------------------------- */
+    //Prepare the final output uint8_t volume: 
+    uint8_t *volume_ToSave_d = NULL; 
+    cudaMalloc((void **)&volume_ToSave_d, Vol_Params.dim_vxl.x * Vol_Params.dim_vxl.y * Vol_Params.dim_vxl.z * sizeof(uint8_t)); 
+
     dim3 BlockDim_HoleFilling( 
         BLOCK_SIZE_X, 
         BLOCK_SIZE_Y, 
@@ -253,16 +264,18 @@ void GPU_Setups(const ImageBase::us_parameters_structure US_Params, const ImageB
         int(ceil( float(Vol_Params.dim_vxl.y) / BLOCK_SIZE_Y )), 
         int(ceil( float(Vol_Params.dim_vxl.z) / BLOCK_SIZE_Z )) 
     );
-    HoleFilling_GPU<<<GridDim_HoleFilling, BlockDim_HoleFilling>>>(Volume_d, Volume_cpy_d, Weighting_d);
+    HoleFilling_GPU<<<GridDim_HoleFilling, BlockDim_HoleFilling>>>(volume_ToSave_d, Volume_cpy_d, Weighting_d);
 
     //Complete the remaining memory transfer:
     cudaMemcpy(Recon_Volume, Volume_d, Vol_Params.dim_vxl.x * Vol_Params.dim_vxl.y * Vol_Params.dim_vxl.z * sizeof(float), cudaMemcpyDeviceToHost);
     cudaMemcpy(Weighting_Volume, Weighting_d, Vol_Params.dim_vxl.x * Vol_Params.dim_vxl.y * Vol_Params.dim_vxl.z * sizeof(float), cudaMemcpyDeviceToHost);
+    cudaMemcpy(VolumeTosave, volume_ToSave_d, Vol_Params.dim_vxl.x * Vol_Params.dim_vxl.y * Vol_Params.dim_vxl.z * sizeof(uint8_t), cudaMemcpyDeviceToHost);
 
     cudaFree(Volume_d);
     cudaFree(Volume_cpy_d);
     cudaFree(Weighting_d);
     cudaFree(US_Frame_d);
+    cudaFree(volume_ToSave_d); 
     
     cudaDeviceSynchronize();
 }

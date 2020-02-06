@@ -369,6 +369,7 @@ bool FreehandReconstruction::ExtractImageToVolumeMatrices(int smoothPatch){
 
             ImageBase::Volume_Container::Volume_data.resize(vol_parameters.dim_vxl.x * vol_parameters.dim_vxl.y * vol_parameters.dim_vxl.z, 0.0f);
             ImageBase::Volume_Container::Weights_data.resize(vol_parameters.dim_vxl.x * vol_parameters.dim_vxl.y * vol_parameters.dim_vxl.z, 0.0f);
+            ImageBase::Volume_Container::VolumeToSave.resize(vol_parameters.dim_vxl.x * vol_parameters.dim_vxl.y * vol_parameters.dim_vxl.z, 0);
 
             SetVolumeDataValid();
         }
@@ -400,10 +401,11 @@ bool FreehandReconstruction::LaunchGPU_Reconstruction(){
     
     uint8_t *UltrasoundFrames_hostPtr = ImageBase::Ultrasound_Container::Frames_Raw_Data.data();
     float *Volume_hostPtr = ImageBase::Volume_Container::Volume_data.data();
+    uint8_t *volumeToSave_hostPtr = ImageBase::Volume_Container::VolumeToSave.data();
     float *weightings_hostPtr = ImageBase::Volume_Container::Weights_data.data();
 
     if(RawPtrSet && IsVolumeDataValid()){
-        GPU_Setups(us_parameters, vol_parameters, NumFrames, ImageToVolume_hostPtr, Volume_hostPtr, weightings_hostPtr, UltrasoundFrames_hostPtr);
+        GPU_Setups(us_parameters, vol_parameters, NumFrames, ImageToVolume_hostPtr, Volume_hostPtr, weightings_hostPtr, volumeToSave_hostPtr, UltrasoundFrames_hostPtr);
         SetVolumeDataReconstructed();
     }
     else{
@@ -413,13 +415,43 @@ bool FreehandReconstruction::LaunchGPU_Reconstruction(){
     }   
 }
 
-bool FreehandReconstruction::SaveReconstructedVolume(){
+bool FreehandReconstruction::SaveReconstructedVolume(char OutputType){
     if(IsVolumeDataReconstructed()){
-        Utilities::writeToBin( 
-            ImageBase::Volume_Container::Volume_data.data(), 
-            vol_parameters.dim_vxl.x * vol_parameters.dim_vxl.y * vol_parameters.dim_vxl.z, 
-            ImageBase::Volume_Container::Output_Path
-        );
+        std::ofstream Export_NRRD;
+        Export_NRRD.open(ImageBase::Volume_Container::Output_Path, std::ofstream::out);
+        Export_NRRD << "NRRD0004" << std::endl;
+
+        if(OutputType == 'F'){
+            Export_NRRD << "type: float" << std::endl;
+        }
+        else if(OutputType == 'I'){
+            Export_NRRD << "type: uint8" << std::endl;
+        }
+        
+        Export_NRRD << "dimension: 3" << std::endl;
+        Export_NRRD << "space: scanner-xyz" << std::endl;
+        Export_NRRD << "sizes: " << vol_parameters.dim_vxl.x << " " << vol_parameters.dim_vxl.y << " " << vol_parameters.dim_vxl.z << std::endl;
+        Export_NRRD << "space directions: (" << vol_parameters.v_size_mm.x << ",0,0) (0," << vol_parameters.v_size_mm.y << ",0) (0,0," << vol_parameters.v_size_mm.z << ")" << std::endl;
+        Export_NRRD << "kinds: domain domain domain" << std::endl;
+        Export_NRRD << "endian: little" << std::endl;
+        Export_NRRD << "encoding: raw" << std::endl;
+        Export_NRRD << "space origin: (" << vol_parameters.origin_mm.x << "," << vol_parameters.origin_mm.y << "," << vol_parameters.origin_mm.z << ")" << std::endl << std::endl;
+        Export_NRRD.close();
+        
+        if(OutputType == 'F'){
+            Utilities::writeToBin( 
+                ImageBase::Volume_Container::Volume_data.data(), 
+                vol_parameters.dim_vxl.x * vol_parameters.dim_vxl.y * vol_parameters.dim_vxl.z, 
+                ImageBase::Volume_Container::Output_Path
+            );
+        }
+        else if(OutputType == 'I'){
+            Utilities::writeToBin( 
+                ImageBase::Volume_Container::VolumeToSave.data(), 
+                vol_parameters.dim_vxl.x * vol_parameters.dim_vxl.y * vol_parameters.dim_vxl.z, 
+                ImageBase::Volume_Container::Output_Path
+            );
+        }
 
         std::cout << "[STATE]: Reconstruction finished! Result volume saved: " << ImageBase::Volume_Container::Output_Path << std::endl;
     }

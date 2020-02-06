@@ -49,6 +49,7 @@ protected:
     //volume data:
     std::vector<float> Volume_data;
     std::vector<float> Weights_data;
+    std::vector<uint8_t> VolumeToSave; 
 
     // Img_Plane XY_Plane
     std::vector<float> XY_Plane;

@@ -12,7 +12,7 @@ public:
     bool ExtractImageToVolumeMatrices(int smoothPatch = 5);
     bool MallocHostSpace();
     bool LaunchGPU_Reconstruction();
-    bool SaveReconstructedVolume();
+    bool SaveReconstructedVolume(char OutputType);
 
     ~FreehandReconstruction();
 
