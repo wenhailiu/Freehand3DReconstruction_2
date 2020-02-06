@@ -10,9 +10,10 @@ set(CMAKE_CXX_STANDARD 14)
 find_package(CUDA)
 
 #set YAML:
-set(YAML_CPP_DIR "/usr/local/lib/cmake/yaml-cpp")
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(YAML_CPP REQUIRED yaml-cpp)
+find_package(yaml-cpp REQUIRED)
+# set(YAML_CPP_DIR "/usr/local/lib/cmake/yaml-cpp")
+# find_package(PkgConfig REQUIRED)
+# pkg_check_modules(YAML_CPP REQUIRED yaml-cpp)
 
 include_directories(freehand3d_US_reconstruction ${CUDA_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR})
 
