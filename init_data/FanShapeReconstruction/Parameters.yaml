@@ -1,0 +1,30 @@
+ScanInfo:
+  Type: 2D
+  AngleBegin: -20
+  AngleEnd: 20
+  MotorRadius: 0.0
+  TrimThreshold: 0
+Ultrasound:
+  Dimension: {x: 720, y: 440, z: 0}
+  PixelSize: {x: 0.311364, y: 0.311364, z: 0.311364}
+  Origin: {x: 0, y: 0, z: 0}
+  FramesInfo:
+    Path: /home/wenhai/vsc_workspace/Freehand3DReconstruction_2/init_data/CMS_3DRecon_Frames.raw
+    FrameNumber: 92
+  Tramsforms:
+    TrackerListsPath: /home/wenhai/vsc_workspace/Freehand3DReconstruction_2/init_data/TrackingData.yaml
+    TrackingDataNumber: 92
+    ImageToProbe: [[0.0887982, -0.00204975, -0.00549427, -34.2278], [0.0019611, 0.0868642, -0.00223052, -0.0955177], [0.00560943, 0.00207954, 0.087755, -4.17483], [0, 0, 0, 1]]
+    ProbeType: Linear_MetalRack
+    ProbeCalibrationDate: 16:28-2nd-Step-2019
+    Calibration_Error_Mean_mm: 0.272456
+    Calibration_Error_STD_mm: 0.142469
+ReconstructionVolume:
+  IsReconstructed: true
+  Dimension: {x: 497, y: 357, z: 63}
+  VoxelSize: {x: 0.5, y: 0.5, z: 0.5}
+  Origin: {x: 49.1083374, y: -88.5337372, z: 195.835922}
+  OutputPath: /home/wenhai/vsc_workspace/Freehand3DReconstruction_2/init_data/recon.nrrd
+  Tramsforms:
+    TrackerListsPath: /home/wenhai/vsc_workspace/Freehand3DReconstruction_2/init_data/TrackingData.yaml
+    TrackingDataNumber: 92
