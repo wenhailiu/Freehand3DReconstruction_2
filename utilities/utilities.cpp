@@ -37,7 +37,7 @@ template void readFromBin<uint8_t>(uint8_t *Output, int Num_Elements, const std:
 template<typename T>
 void writeToBin(T *Output, int Num_Elements, const std::string FILENAME) {
 	std::ofstream OutputStream;
-	OutputStream.open(FILENAME, std::ios::out | std::ios::binary);
+	OutputStream.open(FILENAME, std::ios::out | std::ios::binary | std::ios::app);
 
 	if (!OutputStream.good()) {
 		std::cout << "Failed to open " << FILENAME << std::endl;

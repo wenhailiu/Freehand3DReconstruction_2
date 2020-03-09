@@ -4,6 +4,8 @@
 
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
+#include "thrust/device_vector.h"
+#include "thrust/copy.h"
 
 #include "freehand_reconstruction_GPU.cuh"
 #include "FreehandReconstruction.h"
@@ -26,7 +28,7 @@ __constant__ int FRAME_NUMBER;
 #define BLOCK_SIZE_Y 16
 #define BLOCK_SIZE_Z 2
 
-#define GROUPING_SIZE 1
+#define GROUPING_SIZE 3
 
 #define INTERP_KERNEL_RADIUS 1
 #define HOLEFILLING_KERNEL_RADIUS 1
@@ -35,7 +37,7 @@ __device__ int GetPxlIdx(int col_idx, int row_idx, int pag_idx){
     return col_idx + row_idx * blockDim.x * gridDim.x + pag_idx * blockDim.x * gridDim.x * blockDim.y * gridDim.y;
 }
 
-__global__ void HoleFilling_GPU(uint8_t *Volume_d, float *Volume_cpy_d, float *Weighting_d){
+__global__ void HoleFilling_GPU(uint8_t *Volume_d, uint8_t *Volume_cpy_d, float *Weighting_d){
     int col_idx = threadIdx.x + blockIdx.x * blockDim.x;
     int row_idx = threadIdx.y + blockIdx.y * blockDim.y;
     int pag_idx = threadIdx.z + blockIdx.z * blockDim.z;
@@ -56,9 +58,9 @@ __global__ void HoleFilling_GPU(uint8_t *Volume_d, float *Volume_cpy_d, float *W
                                 (Selected_Pxl[1] >= 0 && Selected_Pxl[1] < VOL_DIM_Y) && 
                                 (Selected_Pxl[2] >= 0 && Selected_Pxl[2] < VOL_DIM_Z) ){
                                 //is the current selected pxl ZERO?
-                                if( Volume_cpy_d[ Selected_Pxl[0] + Selected_Pxl[1] * VOL_DIM_X + Selected_Pxl[2] * VOL_DIM_X * VOL_DIM_Y ] != 0.0f){ 
+                                if( Volume_cpy_d[ Selected_Pxl[0] + Selected_Pxl[1] * VOL_DIM_X + Selected_Pxl[2] * VOL_DIM_X * VOL_DIM_Y ] != 0){ 
                                     //Not Zero, to be selected for hole filling:
-                                    Acc_Sum += Volume_cpy_d[ Selected_Pxl[0] + Selected_Pxl[1] * VOL_DIM_X + Selected_Pxl[2] * VOL_DIM_X * VOL_DIM_Y ];
+                                    Acc_Sum += (float)Volume_cpy_d[ Selected_Pxl[0] + Selected_Pxl[1] * VOL_DIM_X + Selected_Pxl[2] * VOL_DIM_X * VOL_DIM_Y ];
                                     ++Acc_NotZeroVoxel;
                                 }
                             }
@@ -90,7 +92,7 @@ __device__ void Matrix4x4MultiplyPoint(const float* point_in, float* point_out, 
     }
 }
 
-__global__ void US_Distribution_GPU(float* Volume_d, float* Weighting_d, uint8_t* US_Frame_d, 
+__global__ void US_Distribution_GPU(uint8_t* Volume_d, float* Weighting_d, uint8_t* US_Frame_d, 
     //Parameters for Volume:
     // int Vol_Dim_x, int Vol_Dim_y, int Vol_Dim_z, 
     float Vxl_size_x, float Vxl_size_y, float Vxl_size_z, 
@@ -145,10 +147,18 @@ __global__ void US_Distribution_GPU(float* Volume_d, float* Weighting_d, uint8_t
                                         // float Volume_tmp = 
                                         // printf("%f, %f, %f \n", select_x, select_y, select_z);
                                         
-                                        float sum = Volume_d[select_x + select_y * VOL_DIM_X + select_z * VOL_DIM_X * VOL_DIM_Y] * Weighting_d[select_x + select_y * VOL_DIM_X + select_z * VOL_DIM_X * VOL_DIM_Y] + 
+                                        float sum = (float)Volume_d[select_x + select_y * VOL_DIM_X + select_z * VOL_DIM_X * VOL_DIM_Y] * Weighting_d[select_x + select_y * VOL_DIM_X + select_z * VOL_DIM_X * VOL_DIM_Y] + 
                                                     US_Frame_d[col_idx + row_idx * US_DIM_X + frm_idx * US_DIM_X * US_DIM_Y] * inv_distance;
                                         Weighting_d[select_x + select_y * VOL_DIM_X + select_z * VOL_DIM_X * VOL_DIM_Y] += inv_distance;
-                                        Volume_d[select_x + select_y * VOL_DIM_X + select_z * VOL_DIM_X * VOL_DIM_Y] = sum / Weighting_d[select_x + select_y * VOL_DIM_X + select_z * VOL_DIM_X * VOL_DIM_Y];
+                                        float vol_tmpToInteger = roundf(sum / Weighting_d[select_x + select_y * VOL_DIM_X + select_z * VOL_DIM_X * VOL_DIM_Y]); 
+                                        if(vol_tmpToInteger < 0){
+                                            vol_tmpToInteger = 0.0f; 
+                                        }
+                                        else if(vol_tmpToInteger > 255){
+                                            vol_tmpToInteger = 255.0f; 
+                                        }
+
+                                        Volume_d[select_x + select_y * VOL_DIM_X + select_z * VOL_DIM_X * VOL_DIM_Y] = (uint8_t)vol_tmpToInteger;
                                     }
                                 }
                             }
@@ -203,8 +213,18 @@ __global__ void GetYZ_plane(float *Volume_d, float *plane_d, int Location){
     }
 }
 
-void GPU_Setups(const ImageBase::us_parameters_structure US_Params, const ImageBase::volume_parameters_structure Vol_Params, const int NumFrames, const float* TotalMatrices, float* Recon_Volume, float* Weighting_Volume, uint8_t *VolumeTosave, uint8_t* US_Frames){
+void GPU_Setups( 
+    const ImageBase::us_parameters_structure US_Params, 
+    const ImageBase::volume_parameters_structure Vol_Params, 
+    const int NumFrames, 
+    const float* TotalMatrices, 
+    float* Recon_Volume, float* Weighting_Volume, uint8_t *VolumeTosave, 
+    uint8_t* US_Frames)
+{
 
+    //Refactoring on 27th Feb 2020: 
+
+    //Prepare symbols: 
     //Asignment for Device constant memory:
     cudaMemcpyToSymbol(ImageToVolume_DeviceConstant, TotalMatrices, NumFrames * 16 * sizeof(float));
 
@@ -217,23 +237,12 @@ void GPU_Setups(const ImageBase::us_parameters_structure US_Params, const ImageB
 
     cudaMemcpyToSymbol(FRAME_NUMBER, &NumFrames, sizeof(int));
 
-    //Allocate GPU memory:
-    float   *Volume_d       = NULL;
-    float   *Volume_cpy_d   = NULL;
-    float   *Weighting_d    = NULL;
-    uint8_t *US_Frame_d     = NULL;
+    //Declare gpu vector: 
+    thrust::device_vector<uint8_t> US_Frame_d(US_Frames, US_Frames + US_Params.dim_pxl.x * US_Params.dim_pxl.y * NumFrames); //Copy from host
+    thrust::device_vector<uint8_t> Volume_d(Vol_Params.dim_vxl.x * Vol_Params.dim_vxl.y * Vol_Params.dim_vxl.z, 0); 
+    thrust::device_vector<float> Weighting_d(Vol_Params.dim_vxl.x * Vol_Params.dim_vxl.y * Vol_Params.dim_vxl.z, 0.0f); 
 
-    cudaMalloc((void **)&Volume_d, Vol_Params.dim_vxl.x * Vol_Params.dim_vxl.y * Vol_Params.dim_vxl.z * sizeof(float));
-    cudaMalloc((void **)&Volume_cpy_d, Vol_Params.dim_vxl.x * Vol_Params.dim_vxl.y * Vol_Params.dim_vxl.z * sizeof(float));
-    cudaMalloc((void **)&Weighting_d, Vol_Params.dim_vxl.x * Vol_Params.dim_vxl.y * Vol_Params.dim_vxl.z * sizeof(float));
-    cudaMalloc((void **)&US_Frame_d, US_Params.dim_pxl.x * US_Params.dim_pxl.y * NumFrames * sizeof(uint8_t));
-
-    //Copy mem from host RAM to device RAM:
-    cudaMemcpy(US_Frame_d, US_Frames, US_Params.dim_pxl.x * US_Params.dim_pxl.y * NumFrames * sizeof(uint8_t), cudaMemcpyHostToDevice);
-    cudaMemcpy(Weighting_d, Weighting_Volume, Vol_Params.dim_vxl.x * Vol_Params.dim_vxl.y * Vol_Params.dim_vxl.z * sizeof(float), cudaMemcpyHostToDevice);
-    cudaMemcpy(Volume_d, Recon_Volume, Vol_Params.dim_vxl.x * Vol_Params.dim_vxl.y * Vol_Params.dim_vxl.z * sizeof(float), cudaMemcpyHostToDevice);
-
-    /*------------------------------------------- Perform Distribution ------------------------------------------ */
+    /* ------------------------------ Step 1. Voxel distribution --------------------------- */
     //Define threads distribution:
     dim3 BlockDim_Distribution( 
         BLOCK_SIZE_X, 
@@ -245,15 +254,20 @@ void GPU_Setups(const ImageBase::us_parameters_structure US_Params, const ImageB
         int(ceil(float(US_Params.dim_pxl.y) / BLOCK_SIZE_Y / float(GROUPING_SIZE))), 
         int(ceil(float(NumFrames) / BLOCK_SIZE_Z / float(GROUPING_SIZE))) 
     );
-    US_Distribution_GPU<<<GridDim_Distribution, BlockDim_Distribution>>>(Volume_d, Weighting_d, US_Frame_d, Vol_Params.v_size_mm.x, Vol_Params.v_size_mm.y, Vol_Params.v_size_mm.z, Vol_Params.origin_mm.x, Vol_Params.origin_mm.y, Vol_Params.origin_mm.z);
-    cudaMemcpy(Volume_cpy_d, Volume_d, Vol_Params.dim_vxl.x * Vol_Params.dim_vxl.y * Vol_Params.dim_vxl.z * sizeof(float), cudaMemcpyDeviceToDevice);
+    US_Distribution_GPU<<<GridDim_Distribution, BlockDim_Distribution>>>( 
+        thrust::raw_pointer_cast(Volume_d.data()), 
+        thrust::raw_pointer_cast(Weighting_d.data()), 
+        thrust::raw_pointer_cast(US_Frame_d.data()), 
+        Vol_Params.v_size_mm.x, Vol_Params.v_size_mm.y, Vol_Params.v_size_mm.z, 
+        Vol_Params.origin_mm.x, Vol_Params.origin_mm.y, Vol_Params.origin_mm.z
+    );
 
-    
-    /*----------------------------------------------- Hole Filling ---------------------------------------------- */
-    //Prepare the final output uint8_t volume: 
-    uint8_t *volume_ToSave_d = NULL; 
-    cudaMalloc((void **)&volume_ToSave_d, Vol_Params.dim_vxl.x * Vol_Params.dim_vxl.y * Vol_Params.dim_vxl.z * sizeof(uint8_t)); 
+    //release part memory: 
+    US_Frame_d.clear(); 
+    thrust::device_vector<uint8_t>().swap(US_Frame_d); 
 
+    /* ------------------------------ Step 1. Holes filling --------------------------- */
+    thrust::device_vector<uint8_t> Volume_d_HF = Volume_d; 
     dim3 BlockDim_HoleFilling( 
         BLOCK_SIZE_X, 
         BLOCK_SIZE_Y, 
@@ -264,18 +278,12 @@ void GPU_Setups(const ImageBase::us_parameters_structure US_Params, const ImageB
         int(ceil( float(Vol_Params.dim_vxl.y) / BLOCK_SIZE_Y )), 
         int(ceil( float(Vol_Params.dim_vxl.z) / BLOCK_SIZE_Z )) 
     );
-    HoleFilling_GPU<<<GridDim_HoleFilling, BlockDim_HoleFilling>>>(volume_ToSave_d, Volume_cpy_d, Weighting_d);
+    HoleFilling_GPU<<<GridDim_HoleFilling, BlockDim_HoleFilling>>>( 
+        thrust::raw_pointer_cast(Volume_d_HF.data()), 
+        thrust::raw_pointer_cast(Volume_d.data()), 
+        thrust::raw_pointer_cast(Weighting_d.data())
+    );
 
     //Complete the remaining memory transfer:
-    cudaMemcpy(Recon_Volume, Volume_d, Vol_Params.dim_vxl.x * Vol_Params.dim_vxl.y * Vol_Params.dim_vxl.z * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(Weighting_Volume, Weighting_d, Vol_Params.dim_vxl.x * Vol_Params.dim_vxl.y * Vol_Params.dim_vxl.z * sizeof(float), cudaMemcpyDeviceToHost);
-    cudaMemcpy(VolumeTosave, volume_ToSave_d, Vol_Params.dim_vxl.x * Vol_Params.dim_vxl.y * Vol_Params.dim_vxl.z * sizeof(uint8_t), cudaMemcpyDeviceToHost);
-
-    cudaFree(Volume_d);
-    cudaFree(Volume_cpy_d);
-    cudaFree(Weighting_d);
-    cudaFree(US_Frame_d);
-    cudaFree(volume_ToSave_d); 
-    
-    cudaDeviceSynchronize();
+    thrust::copy(Volume_d_HF.begin(), Volume_d_HF.end(), VolumeTosave); 
 }
